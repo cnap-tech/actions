@@ -4,24 +4,24 @@ on:
   workflow_call:
     inputs:
       build-context:
-        description: 'Directory containing your application code'
+        description: "Directory containing your application code"
         required: false
         type: string
-        default: './'
+        default: "./"
       build-command:
-        description: 'Override the detected build command'
+        description: "Override the detected build command"
         required: false
         type: string
       start-command:
-        description: 'Override the detected start command'
+        description: "Override the detected start command"
         required: false
         type: string
       build-apt-packages:
-        description: 'Additional apt packages needed during build (space-separated)'
+        description: "Additional apt packages needed during build (space-separated)"
         required: false
         type: string
       runtime-apt-packages:
-        description: 'Additional apt packages needed at runtime (space-separated)'
+        description: "Additional apt packages needed at runtime (space-separated)"
         required: false
         type: string
 
@@ -54,7 +54,7 @@ jobs:
           {
             "provider": "auto"
           RPEOF
-          
+
           # Add buildAptPackages if provided
           if [ -n "${{ inputs.build-apt-packages }}" ]; then
             # Convert space-separated string to JSON array
@@ -62,7 +62,7 @@ jobs:
             jq --argjson pkgs "$BUILD_PKGS" '. + {buildAptPackages: $pkgs}' railpack.json > railpack.tmp.json
             mv railpack.tmp.json railpack.json
           fi
-          
+
           # Add deploy configuration if needed
           if [ -n "${{ inputs.start-command }}" ] || [ -n "${{ inputs.runtime-apt-packages }}" ]; then
             jq '. + {deploy: {}}' railpack.json > railpack.tmp.json
@@ -81,35 +81,37 @@ jobs:
               mv railpack.tmp.json railpack.json
             fi
           fi
-          
+
           # Close the JSON
           echo "}" >> railpack.json
-          
+
           echo "Generated railpack.json:"
           cat railpack.json
 
       - name: Build with Railpack
         id: build
         working-directory: ${{ inputs.build-context }}
+        env:
+          DOCKER_BUILDKIT: 1
         run: |
           IMAGE_NAME="ghcr.io/${{ github.repository }}:${{ github.sha }}"
-          
+
           # Build with Railpack
           RAILPACK_ARGS="--name $IMAGE_NAME"
-          
+
           # Add build command if provided
           if [ -n "${{ inputs.build-command }}" ]; then
             RAILPACK_ARGS="$RAILPACK_ARGS --build-cmd '${{ inputs.build-command }}'"
           fi
-          
+
           # Add start command if provided (and no config file)
           if [ -n "${{ inputs.start-command }}" ] && [ ! -f railpack.json ]; then
             RAILPACK_ARGS="$RAILPACK_ARGS --start-cmd '${{ inputs.start-command }}'"
           fi
-          
+
           # Build the image
           eval "railpack build $RAILPACK_ARGS ."
-          
+
           echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
 
       - name: Push image
