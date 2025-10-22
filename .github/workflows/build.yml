@@ -46,6 +46,17 @@ jobs:
         run: |
           curl -sSL https://railpack.com/install.sh | sh
 
+      - name: Start BuildKit
+        run: |
+          docker run --rm --privileged -d \
+            --name buildkit \
+            moby/buildkit:latest
+
+          # Wait for BuildKit to be ready
+          sleep 5
+
+          echo "BUILDKIT_HOST=docker-container://buildkit" >> $GITHUB_ENV
+
       - name: Generate Railpack config
         if: ${{ inputs.build-apt-packages != '' || inputs.runtime-apt-packages != '' }}
         working-directory: ${{ inputs.build-context }}
@@ -126,3 +137,7 @@ jobs:
           echo "Commit: ${{ github.sha }}"
           echo "Repository: ${{ github.repository }}"
           echo "Workflow run: ${{ github.run_id }}"
+
+      - name: Stop BuildKit
+        if: always()
+        run: docker stop buildkit
