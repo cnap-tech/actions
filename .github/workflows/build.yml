@@ -44,7 +44,7 @@ jobs:
 
       - name: Install Railpack
         run: |
-          curl -sSL https://railpack.app/install.sh | sh
+          curl -sSL https://railpack.com/install.sh | sh
 
       - name: Generate Railpack config
         if: ${{ inputs.build-apt-packages != '' || inputs.runtime-apt-packages != '' }}
@@ -92,9 +92,6 @@ jobs:
         id: build
         working-directory: ${{ inputs.build-context }}
         run: |
-          # Add Railpack to PATH
-          export PATH="$HOME/.railpack/bin:$PATH"
-          
           IMAGE_NAME="ghcr.io/${{ github.repository }}:${{ github.sha }}"
           
           # Build with Railpack
