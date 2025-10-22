@@ -1,0 +1,127 @@
+name: CNAP Build & Deploy
+
+on:
+  workflow_call:
+    inputs:
+      build-context:
+        description: 'Directory containing your application code'
+        required: false
+        type: string
+        default: './'
+      build-command:
+        description: 'Override the detected build command'
+        required: false
+        type: string
+      start-command:
+        description: 'Override the detected start command'
+        required: false
+        type: string
+      build-apt-packages:
+        description: 'Additional apt packages needed during build (space-separated)'
+        required: false
+        type: string
+      runtime-apt-packages:
+        description: 'Additional apt packages needed at runtime (space-separated)'
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Railpack
+        run: |
+          curl -sSL https://railpack.app/install.sh | sh
+          echo "$HOME/.railpack/bin" >> $GITHUB_PATH
+
+      - name: Generate Railpack config
+        if: ${{ inputs.build-command != '' || inputs.start-command != '' || inputs.build-apt-packages != '' || inputs.runtime-apt-packages != '' }}
+        working-directory: ${{ inputs.build-context }}
+        run: |
+          cat > railpack.json << 'RPEOF'
+          {
+            "provider": "auto"
+          RPEOF
+          
+          # Add buildAptPackages if provided
+          if [ -n "${{ inputs.build-apt-packages }}" ]; then
+            # Convert space-separated string to JSON array
+            BUILD_PKGS=$(echo "${{ inputs.build-apt-packages }}" | jq -R 'split(" ") | map(select(length > 0))')
+            jq --argjson pkgs "$BUILD_PKGS" '. + {buildAptPackages: $pkgs}' railpack.json > railpack.tmp.json
+            mv railpack.tmp.json railpack.json
+          fi
+          
+          # Add deploy configuration if needed
+          if [ -n "${{ inputs.start-command }}" ] || [ -n "${{ inputs.runtime-apt-packages }}" ]; then
+            jq '. + {deploy: {}}' railpack.json > railpack.tmp.json
+            mv railpack.tmp.json railpack.json
+            
+            # Add startCommand
+            if [ -n "${{ inputs.start-command }}" ]; then
+              jq '.deploy.startCommand = "${{ inputs.start-command }}"' railpack.json > railpack.tmp.json
+              mv railpack.tmp.json railpack.json
+            fi
+            
+            # Add runtime apt packages
+            if [ -n "${{ inputs.runtime-apt-packages }}" ]; then
+              RUNTIME_PKGS=$(echo "${{ inputs.runtime-apt-packages }}" | jq -R 'split(" ") | map(select(length > 0))')
+              jq --argjson pkgs "$RUNTIME_PKGS" '.deploy.aptPackages = $pkgs' railpack.json > railpack.tmp.json
+              mv railpack.tmp.json railpack.json
+            fi
+          fi
+          
+          # Close the JSON
+          echo "}" >> railpack.json
+          
+          echo "Generated railpack.json:"
+          cat railpack.json
+
+      - name: Build with Railpack
+        id: build
+        working-directory: ${{ inputs.build-context }}
+        run: |
+          IMAGE_NAME="ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          
+          # Build with Railpack
+          RAILPACK_ARGS="--name $IMAGE_NAME"
+          
+          # Add build command if provided
+          if [ -n "${{ inputs.build-command }}" ]; then
+            RAILPACK_ARGS="$RAILPACK_ARGS --build-cmd '${{ inputs.build-command }}'"
+          fi
+          
+          # Add start command if provided (and no config file)
+          if [ -n "${{ inputs.start-command }}" ] && [ ! -f railpack.json ]; then
+            RAILPACK_ARGS="$RAILPACK_ARGS --start-cmd '${{ inputs.start-command }}'"
+          fi
+          
+          # Build the image
+          eval "railpack build $RAILPACK_ARGS ."
+          
+          echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Push image
+        run: |
+          docker push ${{ steps.build.outputs.image }}
+
+      - name: Notify CNAP
+        if: success()
+        run: |
+          # TODO: Add webhook/API call to notify CNAP of new build
+          echo "Built image: ${{ steps.build.outputs.image }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Workflow run: ${{ github.run_id }}"
