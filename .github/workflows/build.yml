@@ -1,0 +1,91 @@
+name: CNAP Build & Deploy
+
+on:
+  workflow_call:
+    inputs:
+      build-context:
+        description: 'Directory containing your application code'
+        required: false
+        type: string
+        default: './'
+      build-command:
+        description: 'Override the detected build command'
+        required: false
+        type: string
+      start-command:
+        description: 'Override the detected start command'
+        required: false
+        type: string
+      install-command:
+        description: 'Override the detected install command'
+        required: false
+        type: string
+      build-apt-packages:
+        description: 'Additional apt packages needed during build'
+        required: false
+        type: string
+      runtime-apt-packages:
+        description: 'Additional apt packages needed at runtime'
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Railpack
+        run: |
+          curl -sSL https://railpack.app/install.sh | sh
+          echo "$HOME/.railpack/bin" >> $GITHUB_PATH
+
+      - name: Build with Railpack
+        id: build
+        working-directory: ${{ inputs.build-context }}
+        run: |
+          # Build the image using Railpack
+          IMAGE_NAME="ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          
+          # Prepare Railpack options
+          RAILPACK_OPTS=""
+          if [ -n "${{ inputs.build-command }}" ]; then
+            RAILPACK_OPTS="$RAILPACK_OPTS --build-cmd '${{ inputs.build-command }}'"
+          fi
+          if [ -n "${{ inputs.start-command }}" ]; then
+            RAILPACK_OPTS="$RAILPACK_OPTS --start-cmd '${{ inputs.start-command }}'"
+          fi
+          if [ -n "${{ inputs.install-command }}" ]; then
+            RAILPACK_OPTS="$RAILPACK_OPTS --install-cmd '${{ inputs.install-command }}'"
+          fi
+          if [ -n "${{ inputs.build-apt-packages }}" ]; then
+            RAILPACK_OPTS="$RAILPACK_OPTS --build-apt-packages '${{ inputs.build-apt-packages }}'"
+          fi
+          if [ -n "${{ inputs.runtime-apt-packages }}" ]; then
+            RAILPACK_OPTS="$RAILPACK_OPTS --runtime-apt-packages '${{ inputs.runtime-apt-packages }}'"
+          fi
+          
+          # Build and push
+          eval "railpack build $RAILPACK_OPTS --tag $IMAGE_NAME ."
+          docker push $IMAGE_NAME
+          
+          echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Notify CNAP
+        if: success()
+        run: |
+          # TODO: Add webhook/API call to notify CNAP of new build
+          echo "Built image: ${{ steps.build.outputs.image }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Repository: ${{ github.repository }}"

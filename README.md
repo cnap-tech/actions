@@ -1,127 +1,134 @@
-# Reusable GitHub Actions Workflows
+# CNAP Workflows
 
-This repository contains reusable GitHub Actions workflows to simplify common CI/CD tasks.
+Reusable GitHub Actions workflows for building and deploying applications with CNAP.
 
-## Available Workflows
+## 🚀 Build Workflow
 
-### Reusable Deploy Workflow
+The `build.yml` workflow provides automated building using Railpack (successor to Nixpacks) and pushes images to GitHub Container Registry.
 
-A reusable workflow designed to simplify deployments across multiple repositories. This workflow allows you to standardize your deployment process and automatically inherit all secrets from the calling repository.
+### Features
 
-**Location:** `.github/workflows/reusable-deploy.yml`
+- **Automatic Detection**: Railpack automatically detects your application type and build configuration
+- **Customizable**: Override detected commands and add custom packages
+- **Minimal Configuration**: Works out of the box with sensible defaults
+- **Secret Inheritance**: Automatically uses `GITHUB_TOKEN` for registry authentication
 
-#### Features
+### Basic Usage
 
-- Inherit all secrets automatically from the caller repository (no need to pass secrets individually)
-- Configurable image tag for deployments
-- Configurable deployment environment (dev, staging, production)
-- Built-in Docker authentication with GitHub Container Registry
-
-#### Usage
-
-##### Option 1: Inherit All Secrets (Recommended)
-
-This is the simplest approach - all secrets from your repository are automatically available to the reusable workflow:
+Add this workflow to your repository at `.github/workflows/cnap.yml`:
 
 ```yaml
-name: Deploy Application
-
+name: CNAP Build & Deploy
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_call:
 
 jobs:
-  deploy:
-    uses: cnap-tech/workflows/.github/workflows/reusable-deploy.yml@main
-    with:
-      image_tag: latest
-      environment: production
-    secrets: inherit  # Automatically inherits ALL secrets from the caller repo
+  build:
+    uses: cnap-tech/workflows/.github/workflows/build.yml@main
+    secrets: inherit
 ```
 
-##### Option 2: Pass Specific Secrets
+### Advanced Usage
 
-If you prefer to pass secrets explicitly:
+Override build settings when needed:
 
 ```yaml
-name: Deploy Application
-
+name: CNAP Build & Deploy
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_call:
 
 jobs:
-  deploy:
-    uses: cnap-tech/workflows/.github/workflows/reusable-deploy.yml@main
+  build:
+    uses: cnap-tech/workflows/.github/workflows/build.yml@main
     with:
-      image_tag: latest
-      environment: production
-    secrets:
-      GHCR_PAT: ${{ secrets.GHCR_PAT }}  # Passing secret explicitly
+      build-context: './backend'
+      build-command: 'npm run build'
+      start-command: 'npm start'
+      install-command: 'npm ci'
+      build-apt-packages: 'python3 make g++'
+      runtime-apt-packages: 'ca-certificates'
+    secrets: inherit
 ```
 
-#### Inputs
+## 📋 Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `image_tag` | Docker image tag to deploy | No | `latest` |
-| `environment` | Deployment environment (e.g., dev, staging, production) | No | `production` |
+| `build-context` | Directory containing your application code | No | `./` |
+| `build-command` | Override the detected build command | No | Auto-detected |
+| `start-command` | Override the detected start command | No | Auto-detected |
+| `install-command` | Override the detected install command | No | Auto-detected |
+| `build-apt-packages` | Additional apt packages needed during build | No | None |
+| `runtime-apt-packages` | Additional apt packages needed at runtime | No | None |
 
-#### Secrets
+## 🔐 Secrets
 
-| Secret | Description | Required |
-|--------|-------------|----------|
-| `GHCR_PAT` | GitHub Container Registry Personal Access Token | No |
+The workflow uses `secrets: inherit` to automatically access:
+- `GITHUB_TOKEN` - For pushing to GitHub Container Registry
 
-When using `secrets: inherit`, all secrets from your repository are automatically available, including `GHCR_PAT` and any other secrets you've configured.
+## 📦 What Gets Built
 
-#### Example: Multi-Environment Deployment
+The workflow:
+1. Checks out your code
+2. Uses Railpack to detect and build your application
+3. Creates a Docker image tagged with the commit SHA
+4. Pushes to `ghcr.io/your-org/your-repo:commit-sha`
+5. Notifies CNAP when the build is ready
+
+## 🛠️ Supported Languages
+
+Railpack automatically detects and builds:
+- Node.js / TypeScript
+- Python
+- Go
+- Rust
+- Ruby
+- PHP
+- Java / Kotlin
+- .NET
+- And more...
+
+## 📖 Examples
+
+### Monorepo with Custom Context
 
 ```yaml
-name: Multi-Environment Deploy
-
-on:
-  push:
-    branches:
-      - main
-      - staging
-      - develop
-
 jobs:
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
-    uses: cnap-tech/workflows/.github/workflows/reusable-deploy.yml@main
+  build-api:
+    uses: cnap-tech/workflows/.github/workflows/build.yml@main
     with:
-      image_tag: ${{ github.sha }}
-      environment: production
+      build-context: './apps/api'
     secrets: inherit
-
-  deploy-staging:
-    if: github.ref == 'refs/heads/staging'
-    uses: cnap-tech/workflows/.github/workflows/reusable-deploy.yml@main
+  
+  build-web:
+    uses: cnap-tech/workflows/.github/workflows/build.yml@main
     with:
-      image_tag: ${{ github.sha }}
-      environment: staging
-    secrets: inherit
-
-  deploy-dev:
-    if: github.ref == 'refs/heads/develop'
-    uses: cnap-tech/workflows/.github/workflows/reusable-deploy.yml@main
-    with:
-      image_tag: latest
-      environment: dev
+      build-context: './apps/web'
     secrets: inherit
 ```
 
-## Benefits of Using Reusable Workflows
+### Python App with System Dependencies
 
-- **Consistency:** Ensures all your repositories use the same deployment process
-- **Maintainability:** Update the workflow once, and all repositories benefit
-- **Security:** Centralize secret handling and reduce duplication
-- **Simplicity:** With `secrets: inherit`, no need to pass secrets individually
+```yaml
+jobs:
+  build:
+    uses: cnap-tech/workflows/.github/workflows/build.yml@main
+    with:
+      build-apt-packages: 'postgresql-dev libxml2-dev'
+      runtime-apt-packages: 'postgresql-client'
+    secrets: inherit
+```
 
-## Contributing
+## 🔗 Learn More
 
-Feel free to submit issues or pull requests to improve these workflows.
+- [Railpack Documentation](https://railpack.app)
+- [CNAP Documentation](https://cnap.tech/docs)
+- [GitHub Actions Reusable Workflows](https://docs.github.com/en/actions/using-workflows/reusing-workflows)
+
+## 📝 License
+
+MIT
