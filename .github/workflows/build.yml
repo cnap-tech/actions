@@ -128,7 +128,12 @@ jobs:
           # Build the image
           eval "railpack build $RAILPACK_ARGS ."
 
+          # Extract package name for later use (remove registry and tag, lowercase)
+          PACKAGE_NAME=$(echo "$IMAGE_NAME" | sed 's|ghcr.io/||' | sed 's|:.*||' | tr '[:upper:]' '[:lower:]')
+          PACKAGE=$(echo "$PACKAGE_NAME" | cut -d'/' -f2-)
+
           echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "package=$PACKAGE" >> $GITHUB_OUTPUT
 
       - name: Push image
         run: |
@@ -139,23 +144,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Extract package name from image (remove registry and tag)
-          PACKAGE_NAME=$(echo "${{ steps.build.outputs.image }}" | sed 's|ghcr.io/||' | sed 's|:.*||' | tr '[:upper:]' '[:lower:]')
           OWNER="${{ github.repository_owner }}"
-          
+          PACKAGE="${{ steps.build.outputs.package }}"
+
           # Get owner type using gh cli
           OWNER_TYPE=$(gh repo view "${{ github.repository }}" --json owner --jq '.owner.type')
-          
-          # Extract just the package name (remove owner prefix)
-          PACKAGE=$(echo "$PACKAGE_NAME" | cut -d'/' -f2-)
-          
+
           # Use the appropriate API endpoint based on owner type
           if [ "$OWNER_TYPE" == "Organization" ]; then
             API_URL="https://api.github.com/orgs/${OWNER}/packages/container/${PACKAGE}"
           else
             API_URL="https://api.github.com/users/${OWNER}/packages/container/${PACKAGE}"
           fi
-          
+
           # Update package visibility
           curl -X PATCH \
             -H "Accept: application/vnd.github+json" \
@@ -163,7 +164,7 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "${API_URL}" \
             -d "{\"visibility\":\"${{ inputs.image-visibility }}\"}"
-          
+
           echo "Set image visibility to: ${{ inputs.image-visibility }} for ${OWNER_TYPE} package"
 
       - name: Notify CNAP
