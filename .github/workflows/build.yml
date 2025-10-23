@@ -143,42 +143,17 @@ jobs:
           # Get OIDC token from GitHub Actions
           OIDC_TOKEN=$(curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
-          
-          # Extract commit author and message
-          COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
-          COMMIT_MESSAGE=$(git log -1 --pretty=format:'%s')
-          
-          # Get branch name from ref
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          
-          # Prepare JSON payload
+
+          # Prepare simplified JSON payload (most data comes from JWT claims)
           PAYLOAD=$(cat <<EOF
           {
             "image": "${{ steps.build.outputs.image }}",
             "imageTag": "${{ github.sha }}",
-            "repository": {
-              "owner": "${{ github.repository_owner }}",
-              "name": "${{ github.event.repository.name }}",
-              "fullName": "${{ github.repository }}"
-            },
-            "workflow": {
-              "runId": ${{ github.run_id }},
-              "runNumber": ${{ github.run_number }},
-              "runAttempt": ${{ github.run_attempt }},
-              "actor": "${{ github.actor }}"
-            },
-            "commit": {
-              "sha": "${{ github.sha }}",
-              "message": "$COMMIT_MESSAGE",
-              "author": "$COMMIT_AUTHOR",
-              "branch": "$BRANCH_NAME",
-              "ref": "${{ github.ref }}"
-            },
             "buildTimestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF
           )
-          
+
           # Send notification to CNAP API
           HTTP_CODE=$(curl -s -o /tmp/cnap_response.txt -w "%{http_code}" \
             -X POST \
@@ -186,7 +161,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" \
             "${{ inputs.cnap-api-url }}")
-          
+
           # Check response
           if [ "$HTTP_CODE" -eq 200 ]; then
             echo "✅ Successfully notified CNAP of new build"
