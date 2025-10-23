@@ -24,6 +24,11 @@ on:
         description: "Additional apt packages needed at runtime (space-separated)"
         required: false
         type: string
+      cnap-api-url:
+        description: "CNAP API URL for build notifications"
+        required: false
+        type: string
+        default: "https://dash.cnap.tech/api/github/build-notify"
 
 jobs:
   build:
@@ -130,13 +135,69 @@ jobs:
           docker push ${{ steps.build.outputs.image }}
 
       - name: Notify CNAP
-        if: success()
+        if: success() && inputs.cnap-api-url
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
         run: |
-          # TODO: Add webhook/API call to notify CNAP of new build
-          echo "Built image: ${{ steps.build.outputs.image }}"
-          echo "Commit: ${{ github.sha }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "Workflow run: ${{ github.run_id }}"
+          # Get OIDC token from GitHub Actions
+          OIDC_TOKEN=$(curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
+          
+          # Extract commit author and message
+          COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
+          COMMIT_MESSAGE=$(git log -1 --pretty=format:'%s')
+          
+          # Get branch name from ref
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          
+          # Prepare JSON payload
+          PAYLOAD=$(cat <<EOF
+          {
+            "image": "${{ steps.build.outputs.image }}",
+            "imageTag": "${{ github.sha }}",
+            "repository": {
+              "owner": "${{ github.repository_owner }}",
+              "name": "${{ github.event.repository.name }}",
+              "fullName": "${{ github.repository }}"
+            },
+            "workflow": {
+              "runId": ${{ github.run_id }},
+              "runNumber": ${{ github.run_number }},
+              "runAttempt": ${{ github.run_attempt }},
+              "actor": "${{ github.actor }}"
+            },
+            "commit": {
+              "sha": "${{ github.sha }}",
+              "message": "$COMMIT_MESSAGE",
+              "author": "$COMMIT_AUTHOR",
+              "branch": "$BRANCH_NAME",
+              "ref": "${{ github.ref }}"
+            },
+            "buildTimestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          )
+          
+          # Send notification to CNAP API
+          HTTP_CODE=$(curl -s -o /tmp/cnap_response.txt -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "${{ inputs.cnap-api-url }}")
+          
+          # Check response
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Successfully notified CNAP of new build"
+            echo "Image: ${{ steps.build.outputs.image }}"
+            echo "Commit: ${{ github.sha }}"
+            echo "Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          else
+            echo "⚠️  Failed to notify CNAP (HTTP $HTTP_CODE)"
+            cat /tmp/cnap_response.txt
+            exit 1
+          fi
 
       - name: Stop BuildKit
         if: always()
