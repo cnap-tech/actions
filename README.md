@@ -14,16 +14,13 @@ Deploy your application with zero configuration:
 
 ```yaml
 name: CNAP Build & Deploy
-on: push: branches: [main], workflow_dispatch:
+on: { push: { branches: [main] }, workflow_dispatch: }
 
 jobs:
   cnap:
     uses: cnap-tech/actions/.github/workflows/cnap.yml@main
+    permissions: { contents: read, packages: write, id-token: write }
     secrets: inherit
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
 ```
 
 ## Features
@@ -49,65 +46,53 @@ jobs:
 
 ```yaml
 name: CNAP Build & Deploy
-on: push: branches: [main], workflow_dispatch:
+on: { push: { branches: [main] }, workflow_dispatch: }
 
 jobs:
   cnap:
     uses: cnap-tech/actions/.github/workflows/cnap.yml@main
+    permissions: { contents: read, packages: write, id-token: write }
+    secrets: inherit
     with:
       build-context: './apps/api'
-    secrets: inherit
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
 ```
 
 ### Python with Dependencies
 
 ```yaml
 name: CNAP Build & Deploy
-on: push: branches: [main], workflow_dispatch:
+on: { push: { branches: [main] }, workflow_dispatch: }
 
 jobs:
   cnap:
     uses: cnap-tech/actions/.github/workflows/cnap.yml@main
+    permissions: { contents: read, packages: write, id-token: write }
+    secrets: inherit
     with:
       build-apt-packages: 'python3-dev libpq-dev'
       runtime-apt-packages: 'postgresql-client'
-    secrets: inherit
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
 ```
 
 ### Monorepo
 
 ```yaml
 name: CNAP Build & Deploy
-on: push: branches: [main], workflow_dispatch:
+on: { push: { branches: [main] }, workflow_dispatch: }
 
 jobs:
   deploy-api:
     uses: cnap-tech/actions/.github/workflows/cnap.yml@main
+    permissions: { contents: read, packages: write, id-token: write }
+    secrets: inherit
     with:
       build-context: './apps/api'
-    secrets: inherit
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
 
   deploy-web:
     uses: cnap-tech/actions/.github/workflows/cnap.yml@main
+    permissions: { contents: read, packages: write, id-token: write }
+    secrets: inherit
     with:
       build-context: './apps/web'
-    secrets: inherit
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
 ```
 
 ## Supported Languages
