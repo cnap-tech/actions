@@ -139,18 +139,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Use github.repository directly (format: owner/repo)
-          PACKAGE="${{ github.repository }}"
           OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
 
           # Get owner type using gh cli
           OWNER_TYPE=$(gh repo view "${{ github.repository }}" --json owner --jq '.owner.type')
 
           # Use the appropriate API endpoint based on owner type
           if [ "$OWNER_TYPE" == "Organization" ]; then
-            API_URL="https://api.github.com/orgs/${OWNER}/packages/container/${PACKAGE}"
+            API_URL="https://api.github.com/orgs/${OWNER}/packages/container/${REPO_NAME}/visibility"
           else
-            API_URL="https://api.github.com/users/${OWNER}/packages/container/${PACKAGE}"
+            API_URL="https://api.github.com/users/${OWNER}/packages/container/${REPO_NAME}/visibility"
           fi
 
           # Update package visibility
@@ -161,7 +160,7 @@ jobs:
             "${API_URL}" \
             -d "{\"visibility\":\"${{ inputs.image-visibility }}\"}"
 
-          echo "Set image visibility to: ${{ inputs.image-visibility }} for ${OWNER_TYPE} package"
+          echo "Set image visibility to: ${{ inputs.image-visibility }} for ${OWNER_TYPE} package ${REPO_NAME}"
 
       - name: Notify CNAP
         if: success()
