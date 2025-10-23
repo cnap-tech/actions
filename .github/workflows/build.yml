@@ -135,7 +135,7 @@ jobs:
           docker push ${{ steps.build.outputs.image }}
 
       - name: Set image visibility
-        if: inputs.image-visibility != ''
+        if: inputs.image-visibility
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
