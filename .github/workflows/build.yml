@@ -139,33 +139,28 @@ jobs:
         run: |
           # Extract package name from image (remove registry and tag)
           PACKAGE_NAME=$(echo "${{ steps.build.outputs.image }}" | sed 's|ghcr.io/||' | sed 's|:.*||' | tr '[:upper:]' '[:lower:]')
+          OWNER="${{ github.repository_owner }}"
+          OWNER_TYPE="${{ github.repository_owner_type }}"
           
-          # Determine if this is an org or user package
-          if [[ "$PACKAGE_NAME" == *"/"* ]]; then
-            ORG_OR_USER=$(echo "$PACKAGE_NAME" | cut -d'/' -f1)
-            PACKAGE=$(echo "$PACKAGE_NAME" | cut -d'/' -f2-)
-            
-            # Try org endpoint first
-            RESPONSE=$(curl -s -w "%{http_code}" -o /tmp/visibility_response.json \
-              -X PATCH \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/orgs/${ORG_OR_USER}/packages/container/${PACKAGE}" \
-              -d "{\"visibility\":\"${{ inputs.image-visibility }}\"}")
-            
-            # If org fails (404), try user endpoint
-            if [ "$RESPONSE" == "404" ]; then
-              curl -X PATCH \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/users/${ORG_OR_USER}/packages/container/${PACKAGE}" \
-                -d "{\"visibility\":\"${{ inputs.image-visibility }}\"}"
-            fi
+          # Extract just the package name (remove owner prefix)
+          PACKAGE=$(echo "$PACKAGE_NAME" | cut -d'/' -f2-)
+          
+          # Use the appropriate API endpoint based on owner type
+          if [ "$OWNER_TYPE" == "Organization" ]; then
+            API_URL="https://api.github.com/orgs/${OWNER}/packages/container/${PACKAGE}"
+          else
+            API_URL="https://api.github.com/users/${OWNER}/packages/container/${PACKAGE}"
           fi
           
-          echo "Set image visibility to: ${{ inputs.image-visibility }}"
+          # Update package visibility
+          curl -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}" \
+            -d "{\"visibility\":\"${{ inputs.image-visibility }}\"}"
+          
+          echo "Set image visibility to: ${{ inputs.image-visibility }} for ${OWNER_TYPE} package"
 
       - name: Notify CNAP
         if: success()
