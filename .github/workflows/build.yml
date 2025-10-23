@@ -24,11 +24,6 @@ on:
         description: "Additional apt packages needed at runtime (space-separated)"
         required: false
         type: string
-      image-visibility:
-        description: "Container image visibility (public or private)"
-        required: false
-        type: string
-        default: "private"
 
 jobs:
   build:
@@ -133,34 +128,6 @@ jobs:
       - name: Push image
         run: |
           docker push ${{ steps.build.outputs.image }}
-
-      - name: Set image visibility
-        if: inputs.image-visibility
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          OWNER="${{ github.repository_owner }}"
-          REPO_NAME="${{ github.event.repository.name }}"
-
-          # Get owner type using gh api
-          OWNER_TYPE=$(gh api /users/${OWNER} --jq .type)
-
-          # Update package visibility using gh api
-          if [ "$OWNER_TYPE" == "Organization" ]; then
-            gh api \
-              -X PATCH \
-              -H "Accept: application/vnd.github+json" \
-              /orgs/${OWNER}/packages/container/${REPO_NAME} \
-              -f visibility=${{ inputs.image-visibility }}
-          else
-            gh api \
-              -X PATCH \
-              -H "Accept: application/vnd.github+json" \
-              /users/${OWNER}/packages/container/${REPO_NAME} \
-              -f visibility=${{ inputs.image-visibility }}
-          fi
-
-          echo "Set image visibility to: ${{ inputs.image-visibility }} for ${OWNER_TYPE} package ${REPO_NAME}"
 
       - name: Notify CNAP
         if: success()
