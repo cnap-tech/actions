@@ -136,11 +136,15 @@ jobs:
 
       - name: Set image visibility
         if: inputs.image-visibility != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Extract package name from image (remove registry and tag)
           PACKAGE_NAME=$(echo "${{ steps.build.outputs.image }}" | sed 's|ghcr.io/||' | sed 's|:.*||' | tr '[:upper:]' '[:lower:]')
           OWNER="${{ github.repository_owner }}"
-          OWNER_TYPE="${{ github.repository_owner_type }}"
+          
+          # Get owner type using gh cli
+          OWNER_TYPE=$(gh repo view "${{ github.repository }}" --json owner --jq '.owner.type')
           
           # Extract just the package name (remove owner prefix)
           PACKAGE=$(echo "$PACKAGE_NAME" | cut -d'/' -f2-)
