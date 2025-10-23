@@ -128,12 +128,7 @@ jobs:
           # Build the image
           eval "railpack build $RAILPACK_ARGS ."
 
-          # Extract package name for later use (remove registry and tag, lowercase)
-          PACKAGE_NAME=$(echo "$IMAGE_NAME" | sed 's|ghcr.io/||' | sed 's|:.*||' | tr '[:upper:]' '[:lower:]')
-          PACKAGE=$(echo "$PACKAGE_NAME" | cut -d'/' -f2-)
-
           echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
-          echo "package=$PACKAGE" >> $GITHUB_OUTPUT
 
       - name: Push image
         run: |
@@ -144,8 +139,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Use github.repository directly (format: owner/repo)
+          PACKAGE="${{ github.repository }}"
           OWNER="${{ github.repository_owner }}"
-          PACKAGE="${{ steps.build.outputs.package }}"
 
           # Get owner type using gh cli
           OWNER_TYPE=$(gh repo view "${{ github.repository }}" --json owner --jq '.owner.type')
