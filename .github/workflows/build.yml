@@ -24,7 +24,7 @@ on:
         description: "Additional apt packages needed at runtime (space-separated)"
         required: false
         type: string
-      cnap-api-url:
+      cnap-notify-url:
         description: "CNAP API URL for build notifications"
         required: false
         type: string
@@ -135,7 +135,7 @@ jobs:
           docker push ${{ steps.build.outputs.image }}
 
       - name: Notify CNAP
-        if: success() && inputs.cnap-api-url
+        if: success() && inputs.cnap-notify-url
         env:
           ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
           ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
@@ -160,7 +160,7 @@ jobs:
             -H "Authorization: Bearer $OIDC_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" \
-            "${{ inputs.cnap-api-url }}")
+            "${{ inputs.cnap-notify-url }}")
 
           # Check response
           if [ "$HTTP_CODE" -eq 200 ]; then
