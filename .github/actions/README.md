@@ -86,7 +86,6 @@ Sends a build notification to the CNAP API.
   with:
     image: 'ghcr.io/owner/repo:sha'
     image-tag: 'abc123def'
-    notify-url: 'https://dash.cnap.tech/api/github/build-notify'  # Optional
 ```
 
 **Inputs:**
