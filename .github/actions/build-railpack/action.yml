@@ -1,0 +1,50 @@
+name: 'Build with Railpack'
+description: 'Builds a Docker image using Railpack'
+inputs:
+  image-name:
+    description: 'Full Docker image name (e.g., ghcr.io/owner/repo:tag)'
+    required: true
+  build-command:
+    description: 'Override the detected build command'
+    required: false
+  start-command:
+    description: 'Override the detected start command'
+    required: false
+  build-context:
+    description: 'Directory containing application code'
+    required: false
+    default: './'
+outputs:
+  image:
+    description: 'The built Docker image name'
+    value: ${{ steps.build.outputs.image }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Build with Railpack
+      id: build
+      shell: bash
+      working-directory: ${{ inputs.build-context }}
+      env:
+        DOCKER_BUILDKIT: 1
+      run: |
+        IMAGE_NAME="${{ inputs.image-name }}"
+
+        # Build with Railpack
+        RAILPACK_ARGS="--name $IMAGE_NAME"
+
+        # Add build command if provided
+        if [ -n "${{ inputs.build-command }}" ]; then
+          RAILPACK_ARGS="$RAILPACK_ARGS --build-cmd '${{ inputs.build-command }}'"
+        fi
+
+        # Add start command if provided (and no config file)
+        if [ -n "${{ inputs.start-command }}" ] && [ ! -f railpack.json ]; then
+          RAILPACK_ARGS="$RAILPACK_ARGS --start-cmd '${{ inputs.start-command }}'"
+        fi
+
+        # Build the image
+        eval "railpack build $RAILPACK_ARGS ."
+
+        echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+

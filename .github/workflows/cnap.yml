@@ -51,84 +51,26 @@ jobs:
         run: |
           curl -sSL https://railpack.com/install.sh | bash
 
-      - name: Start BuildKit
-        run: |
-          docker run --rm --privileged -d \
-            --name buildkit \
-            moby/buildkit:latest
-
-          # Wait for BuildKit to be ready
-          sleep 5
-
-          echo "BUILDKIT_HOST=docker-container://buildkit" >> $GITHUB_ENV
+      - name: Setup BuildKit
+        uses: ./.github/actions/setup-buildkit
 
       - name: Generate Railpack config
-        if: ${{ inputs.build-apt-packages != '' || inputs.runtime-apt-packages != '' }}
-        working-directory: ${{ inputs.build-context }}
-        run: |
-          cat > railpack.json << 'RPEOF'
-          {
-            "provider": "auto"
-          RPEOF
-
-          # Add buildAptPackages if provided
-          if [ -n "${{ inputs.build-apt-packages }}" ]; then
-            # Convert space-separated string to JSON array
-            BUILD_PKGS=$(echo "${{ inputs.build-apt-packages }}" | jq -R 'split(" ") | map(select(length > 0))')
-            jq --argjson pkgs "$BUILD_PKGS" '. + {buildAptPackages: $pkgs}' railpack.json > railpack.tmp.json
-            mv railpack.tmp.json railpack.json
-          fi
-
-          # Add deploy configuration if needed
-          if [ -n "${{ inputs.start-command }}" ] || [ -n "${{ inputs.runtime-apt-packages }}" ]; then
-            jq '. + {deploy: {}}' railpack.json > railpack.tmp.json
-            mv railpack.tmp.json railpack.json
-            
-            # Add startCommand
-            if [ -n "${{ inputs.start-command }}" ]; then
-              jq '.deploy.startCommand = "${{ inputs.start-command }}"' railpack.json > railpack.tmp.json
-              mv railpack.tmp.json railpack.json
-            fi
-            
-            # Add runtime apt packages
-            if [ -n "${{ inputs.runtime-apt-packages }}" ]; then
-              RUNTIME_PKGS=$(echo "${{ inputs.runtime-apt-packages }}" | jq -R 'split(" ") | map(select(length > 0))')
-              jq --argjson pkgs "$RUNTIME_PKGS" '.deploy.aptPackages = $pkgs' railpack.json > railpack.tmp.json
-              mv railpack.tmp.json railpack.json
-            fi
-          fi
-
-          # Close the JSON
-          echo "}" >> railpack.json
-
-          echo "Generated railpack.json:"
-          cat railpack.json
+        if: ${{ inputs.build-apt-packages != '' || inputs.runtime-apt-packages != '' || inputs.start-command != '' }}
+        uses: ./.github/actions/generate-railpack-config
+        with:
+          build-apt-packages: ${{ inputs.build-apt-packages }}
+          runtime-apt-packages: ${{ inputs.runtime-apt-packages }}
+          start-command: ${{ inputs.start-command }}
+          build-context: ${{ inputs.build-context }}
 
       - name: Build with Railpack
         id: build
-        working-directory: ${{ inputs.build-context }}
-        env:
-          DOCKER_BUILDKIT: 1
-        run: |
-          IMAGE_NAME="ghcr.io/${{ github.repository }}:${{ github.sha }}"
-
-          # Build with Railpack
-          RAILPACK_ARGS="--name $IMAGE_NAME"
-
-          # Add build command if provided
-          if [ -n "${{ inputs.build-command }}" ]; then
-            RAILPACK_ARGS="$RAILPACK_ARGS --build-cmd '${{ inputs.build-command }}'"
-          fi
-
-          # Add start command if provided (and no config file)
-          if [ -n "${{ inputs.start-command }}" ] && [ ! -f railpack.json ]; then
-            RAILPACK_ARGS="$RAILPACK_ARGS --start-cmd '${{ inputs.start-command }}'"
-          fi
-
-          # Build the image
-          eval "railpack build $RAILPACK_ARGS ."
-
-          echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+        uses: ./.github/actions/build-railpack
+        with:
+          image-name: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          build-command: ${{ inputs.build-command }}
+          start-command: ${{ inputs.start-command }}
+          build-context: ${{ inputs.build-context }}
 
       - name: Push image
         run: |
@@ -136,44 +78,12 @@ jobs:
 
       - name: Notify CNAP
         if: success() && inputs.cnap-notify-url
-        env:
-          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
-          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
-        run: |
-          # Get OIDC token from GitHub Actions
-          OIDC_TOKEN=$(curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
-
-          # Prepare simplified JSON payload (most data comes from JWT claims)
-          PAYLOAD=$(cat <<EOF
-          {
-            "image": "${{ steps.build.outputs.image }}",
-            "imageTag": "${{ github.sha }}",
-            "buildTimestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
-          EOF
-          )
-
-          # Send notification to CNAP API
-          HTTP_CODE=$(curl -s -o /tmp/cnap_response.txt -w "%{http_code}" \
-            -X POST \
-            -H "Authorization: Bearer $OIDC_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD" \
-            "${{ inputs.cnap-notify-url }}")
-
-          # Check response
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "✅ Successfully notified CNAP of new build"
-            echo "Image: ${{ steps.build.outputs.image }}"
-            echo "Commit: ${{ github.sha }}"
-            echo "Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          else
-            echo "⚠️  Failed to notify CNAP (HTTP $HTTP_CODE)"
-            cat /tmp/cnap_response.txt
-            exit 1
-          fi
+        uses: ./.github/actions/notify-cnap
+        with:
+          image: ${{ steps.build.outputs.image }}
+          image-tag: ${{ github.sha }}
+          notify-url: ${{ inputs.cnap-notify-url }}
 
       - name: Stop BuildKit
         if: always()
-        run: docker stop buildkit || true
+        uses: ./.github/actions/stop-buildkit

@@ -1,0 +1,56 @@
+name: 'Notify CNAP'
+description: 'Sends build notification to CNAP API'
+inputs:
+  image:
+    description: 'Full Docker image name'
+    required: true
+  image-tag:
+    description: 'Image tag (usually commit SHA)'
+    required: true
+  notify-url:
+    description: 'CNAP API URL for build notifications'
+    required: true
+    default: 'https://dash.cnap.tech/api/github/build-notify'
+runs:
+  using: 'composite'
+  steps:
+    - name: Notify CNAP
+      shell: bash
+      env:
+        ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+      run: |
+        # Get OIDC token from GitHub Actions
+        OIDC_TOKEN=$(curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
+
+        # Prepare simplified JSON payload (most data comes from JWT claims)
+        PAYLOAD=$(cat <<EOF
+        {
+          "image": "${{ inputs.image }}",
+          "imageTag": "${{ inputs.image-tag }}",
+          "buildTimestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        }
+        EOF
+        )
+
+        # Send notification to CNAP API
+        HTTP_CODE=$(curl -s -o /tmp/cnap_response.txt -w "%{http_code}" \
+          -X POST \
+          -H "Authorization: Bearer $OIDC_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "$PAYLOAD" \
+          "${{ inputs.notify-url }}")
+
+        # Check response
+        if [ "$HTTP_CODE" -eq 200 ]; then
+          echo "✅ Successfully notified CNAP of new build"
+          echo "Image: ${{ inputs.image }}"
+          echo "Commit: ${{ inputs.image-tag }}"
+          echo "Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        else
+          echo "⚠️  Failed to notify CNAP (HTTP $HTTP_CODE)"
+          cat /tmp/cnap_response.txt
+          exit 1
+        fi
+

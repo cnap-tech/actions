@@ -1,0 +1,62 @@
+name: 'Generate Railpack Config'
+description: 'Generates railpack.json configuration file based on build settings'
+inputs:
+  build-apt-packages:
+    description: 'Additional apt packages needed during build (space-separated)'
+    required: false
+  runtime-apt-packages:
+    description: 'Additional apt packages needed at runtime (space-separated)'
+    required: false
+  start-command:
+    description: 'Start command override'
+    required: false
+  build-context:
+    description: 'Directory containing application code'
+    required: false
+    default: './'
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate Railpack config
+      if: ${{ inputs.build-apt-packages != '' || inputs.runtime-apt-packages != '' || inputs.start-command != '' }}
+      shell: bash
+      working-directory: ${{ inputs.build-context }}
+      run: |
+        cat > railpack.json << 'RPEOF'
+        {
+          "provider": "auto"
+        RPEOF
+
+        # Add buildAptPackages if provided
+        if [ -n "${{ inputs.build-apt-packages }}" ]; then
+          # Convert space-separated string to JSON array
+          BUILD_PKGS=$(echo "${{ inputs.build-apt-packages }}" | jq -R 'split(" ") | map(select(length > 0))')
+          jq --argjson pkgs "$BUILD_PKGS" '. + {buildAptPackages: $pkgs}' railpack.json > railpack.tmp.json
+          mv railpack.tmp.json railpack.json
+        fi
+
+        # Add deploy configuration if needed
+        if [ -n "${{ inputs.start-command }}" ] || [ -n "${{ inputs.runtime-apt-packages }}" ]; then
+          jq '. + {deploy: {}}' railpack.json > railpack.tmp.json
+          mv railpack.tmp.json railpack.json
+          
+          # Add startCommand
+          if [ -n "${{ inputs.start-command }}" ]; then
+            jq '.deploy.startCommand = "${{ inputs.start-command }}"' railpack.json > railpack.tmp.json
+            mv railpack.tmp.json railpack.json
+          fi
+          
+          # Add runtime apt packages
+          if [ -n "${{ inputs.runtime-apt-packages }}" ]; then
+            RUNTIME_PKGS=$(echo "${{ inputs.runtime-apt-packages }}" | jq -R 'split(" ") | map(select(length > 0))')
+            jq --argjson pkgs "$RUNTIME_PKGS" '.deploy.aptPackages = $pkgs' railpack.json > railpack.tmp.json
+            mv railpack.tmp.json railpack.json
+          fi
+        fi
+
+        # Close the JSON
+        echo "}" >> railpack.json
+
+        echo "Generated railpack.json:"
+        cat railpack.json
+

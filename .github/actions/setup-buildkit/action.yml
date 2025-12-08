@@ -1,0 +1,17 @@
+name: 'Setup BuildKit'
+description: 'Starts a BuildKit container for Docker builds'
+runs:
+  using: 'composite'
+  steps:
+    - name: Start BuildKit
+      shell: bash
+      run: |
+        docker run --rm --privileged -d \
+          --name buildkit \
+          moby/buildkit:latest
+
+        # Wait for BuildKit to be ready
+        sleep 5
+
+        echo "BUILDKIT_HOST=docker-container://buildkit" >> $GITHUB_ENV
+

@@ -1,0 +1,9 @@
+name: 'Stop BuildKit'
+description: 'Stops and cleans up the BuildKit container'
+runs:
+  using: 'composite'
+  steps:
+    - name: Stop BuildKit
+      shell: bash
+      run: docker stop buildkit || true
+
