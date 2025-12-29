@@ -52,11 +52,11 @@ jobs:
           curl -sSL https://railpack.com/install.sh | bash
 
       - name: Setup BuildKit
-        uses: ./.github/actions/setup-buildkit
+        uses: cnap-tech/actions/.github/actions/setup-buildkit@main
 
       - name: Generate Railpack config
         if: ${{ inputs.build-apt-packages != '' || inputs.runtime-apt-packages != '' || inputs.start-command != '' }}
-        uses: ./.github/actions/generate-railpack-config
+        uses: cnap-tech/actions/.github/actions/generate-railpack-config@main
         with:
           build-apt-packages: ${{ inputs.build-apt-packages }}
           runtime-apt-packages: ${{ inputs.runtime-apt-packages }}
@@ -65,7 +65,7 @@ jobs:
 
       - name: Build with Railpack
         id: build
-        uses: ./.github/actions/build-railpack
+        uses: cnap-tech/actions/.github/actions/build-railpack@main
         with:
           image-name: ghcr.io/${{ github.repository }}:${{ github.sha }}
           build-command: ${{ inputs.build-command }}
@@ -78,7 +78,7 @@ jobs:
 
       - name: Notify CNAP
         if: success() && inputs.cnap-notify-url
-        uses: ./.github/actions/notify-cnap
+        uses: cnap-tech/actions/.github/actions/notify-cnap@main
         with:
           image: ${{ steps.build.outputs.image }}
           image-tag: ${{ github.sha }}
@@ -86,4 +86,4 @@ jobs:
 
       - name: Stop BuildKit
         if: always()
-        uses: ./.github/actions/stop-buildkit
+        uses: cnap-tech/actions/.github/actions/stop-buildkit@main
