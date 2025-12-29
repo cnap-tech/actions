@@ -54,6 +54,18 @@ jobs:
       - name: Setup BuildKit
         uses: cnap-tech/actions/.github/actions/setup-buildkit@main
 
+      # Determine image tag based on event type
+      # PR builds: pr-<number>-<short-sha>, Push/dispatch builds: <short-sha>
+      - name: Set image tag
+        id: tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-8)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Generate Railpack config
         if: ${{ inputs.build-apt-packages != '' || inputs.runtime-apt-packages != '' || inputs.start-command != '' }}
         uses: cnap-tech/actions/.github/actions/generate-railpack-config@main
@@ -67,7 +79,7 @@ jobs:
         id: build
         uses: cnap-tech/actions/.github/actions/build-railpack@main
         with:
-          image-name: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          image-name: ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}
           build-command: ${{ inputs.build-command }}
           start-command: ${{ inputs.start-command }}
           build-context: ${{ inputs.build-context }}
@@ -78,11 +90,11 @@ jobs:
           docker push ${{ steps.build.outputs.image }}
 
       - name: Notify CNAP
-        if: success() && inputs.cnap-notify-url && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        if: success() && inputs.cnap-notify-url
         uses: cnap-tech/actions/.github/actions/notify-cnap@main
         with:
           image: ${{ steps.build.outputs.image }}
-          image-tag: ${{ github.sha }}
+          image-tag: ${{ steps.tag.outputs.tag }}
           notify-url: ${{ inputs.cnap-notify-url }}
 
       - name: Stop BuildKit

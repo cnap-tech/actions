@@ -5,7 +5,7 @@ inputs:
     description: 'Full Docker image name'
     required: true
   image-tag:
-    description: 'Image tag (usually commit SHA)'
+    description: 'Image tag (e.g., abc123de or pr-42-abc123de)'
     required: true
   notify-url:
     description: 'CNAP API URL for build notifications'
@@ -24,7 +24,7 @@ runs:
         OIDC_TOKEN=$(curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
           "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
 
-        # Prepare simplified JSON payload (most data comes from JWT claims)
+        # Prepare JSON payload (most data comes from JWT claims and GitHub webhook)
         PAYLOAD=$(cat <<EOF
         {
           "image": "${{ inputs.image }}",
@@ -46,11 +46,13 @@ runs:
         if [ "$HTTP_CODE" -eq 200 ]; then
           echo "✅ Successfully notified CNAP of new build"
           echo "Image: ${{ inputs.image }}"
-          echo "Commit: ${{ inputs.image-tag }}"
+          echo "Tag: ${{ inputs.image-tag }}"
           echo "Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         else
           echo "⚠️  Failed to notify CNAP (HTTP $HTTP_CODE)"
           cat /tmp/cnap_response.txt
           exit 1
         fi
+
+
 
