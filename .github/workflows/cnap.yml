@@ -28,7 +28,7 @@ on:
         description: "CNAP API URL for build notifications"
         required: false
         type: string
-        default: "https://dash.cnap.tech/api/github/build-notify"
+        default: "https://cnap.tech/api/github/build-notify"
 
 jobs:
   build:
