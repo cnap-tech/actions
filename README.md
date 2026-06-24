@@ -23,12 +23,32 @@ jobs:
     secrets: inherit
 ```
 
+Route CI jobs through Akua hosted runners without a shared planner token:
+
+```yaml
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  runner-plan:
+    uses: cnap-tech/actions/.github/workflows/runner-plan.yml@main
+
+  test:
+    needs: runner-plan
+    runs-on: ${{ fromJSON(needs.runner-plan.outputs.linux_x64) }}
+    steps:
+      - uses: actions/checkout@v6
+      - run: go test ./...
+```
+
 ## Features
 
 - **Zero Configuration** - Automatic language detection and build setup
 - **Multi-Language Support** - Node.js, Python, Go, Rust, and more
 - **Container Ready** - Automatic Docker image creation and registry push
 - **Secure** - Built-in OIDC authentication and secret management
+- **Akua Runner Planning** - Reusable OIDC-authenticated planner for Akua hosted runners
 
 ## Configuration
 
