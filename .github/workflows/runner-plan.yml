@@ -33,7 +33,11 @@ permissions:
 jobs:
   plan:
     name: Runner plan
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - akua-hetzner
+      - akua-x64-ci-v2
+      - akua-run-${{ github.run_id }}
     outputs:
       docker_x64: ${{ steps.plan.outputs.docker_x64 }}
       linux_x64: ${{ steps.plan.outputs.linux_x64 }}
