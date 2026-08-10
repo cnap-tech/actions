@@ -23,12 +23,12 @@ jobs:
     secrets: inherit
 ```
 
-Route CI jobs through Akua hosted runners without a shared planner token:
+Route CI jobs through the isolated AgentOS ARC pools without a planner token or
+external control-plane request:
 
 ```yaml
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   runner-plan:
@@ -48,7 +48,7 @@ jobs:
 - **Multi-Language Support** - Node.js, Python, Go, Rust, and more
 - **Container Ready** - Automatic Docker image creation and registry push
 - **Secure** - Built-in OIDC authentication and secret management
-- **Akua Runner Planning** - Reusable OIDC-authenticated planner for Akua hosted runners
+- **Akua Runner Planning** - Reusable static routing to the audited AgentOS ARC pools
 
 ## Configuration
 
