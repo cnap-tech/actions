@@ -4,7 +4,8 @@ on:
   workflow_call:
     inputs:
       control-plane-url:
-        default: https://runner-control-plane.robinbraemer.workers.dev
+        description: Deprecated compatibility input; ARC routing is resolved locally.
+        default: ""
         required: false
         type: string
       jobs-json:
@@ -12,7 +13,8 @@ on:
         required: false
         type: string
       oidc-audience:
-        default: akua-runner-control-plane
+        description: Deprecated compatibility input; ARC routing is resolved locally.
+        default: ""
         required: false
         type: string
     outputs:
@@ -28,16 +30,11 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   plan:
     name: Runner plan
-    runs-on:
-      - self-hosted
-      - akua-hetzner
-      - akua-x64-ci-v2
-      - akua-run-${{ github.run_id }}
+    runs-on: akua-x64-ci-v2
     outputs:
       docker_x64: ${{ steps.plan.outputs.docker_x64 }}
       linux_x64: ${{ steps.plan.outputs.linux_x64 }}
@@ -45,39 +42,28 @@ jobs:
     steps:
       - id: plan
         env:
-          AKUA_RUNNER_CONTROL_PLANE_URL: ${{ inputs.control-plane-url }}
           AKUA_RUNNER_JOBS_JSON: ${{ inputs.jobs-json }}
-          AKUA_RUNNER_OIDC_AUDIENCE: ${{ inputs.oidc-audience }}
         run: |
           set -euo pipefail
 
-          oidc_response="$(
-            curl -fsS \
-              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AKUA_RUNNER_OIDC_AUDIENCE}"
-          )"
-          oidc_token="$(jq -er '.value' <<<"$oidc_response")"
-
-          payload="$(
-            jq -n \
-              --arg repository "$GITHUB_REPOSITORY" \
-              --arg runId "$GITHUB_RUN_ID" \
-              --argjson jobs "$AKUA_RUNNER_JOBS_JSON" \
-              '{
-                repository: $repository,
-                runId: $runId,
-                jobs: $jobs
-              }'
-          )"
-
-          response="$(
-            curl -fsS \
-              -H "Authorization: Bearer ${oidc_token}" \
-              -H "Content-Type: application/json" \
-              -d "$payload" \
-              "${AKUA_RUNNER_CONTROL_PLANE_URL}/api/github/runner-plan"
+          decisions="$(
+            jq -cer '
+              if type != "object" then
+                error("jobs-json must be an object")
+              else
+                with_entries(
+                  .value = (
+                    if .value == "linux-x64" then ["akua-x64-ci-v2"]
+                    elif .value == "docker-x64" then ["akua-docker-ci-v2"]
+                    elif .value == "heavy-x64" then ["akua-heavy-ci-v2"]
+                    else error("unsupported runner class: \(.value)")
+                    end
+                  )
+                )
+              end
+            ' <<<"$AKUA_RUNNER_JOBS_JSON"
           )"
 
-          echo "runs_on_json=$(jq -c '.decisions | map_values(.runsOn)' <<<"$response")" >> "$GITHUB_OUTPUT"
-          echo "linux_x64=$(jq -c '.decisions.linux_x64.runsOn // ["ubuntu-latest"]' <<<"$response")" >> "$GITHUB_OUTPUT"
-          echo "docker_x64=$(jq -c '.decisions.docker_x64.runsOn // ["ubuntu-latest"]' <<<"$response")" >> "$GITHUB_OUTPUT"
+          echo "runs_on_json=$decisions" >> "$GITHUB_OUTPUT"
+          echo "linux_x64=$(jq -c '.linux_x64 // ["akua-x64-ci-v2"]' <<<"$decisions")" >> "$GITHUB_OUTPUT"
+          echo "docker_x64=$(jq -c '.docker_x64 // ["akua-docker-ci-v2"]' <<<"$decisions")" >> "$GITHUB_OUTPUT"

@@ -32,7 +32,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: akua-docker-ci-v2
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
